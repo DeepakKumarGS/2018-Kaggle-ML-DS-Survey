@@ -1,0 +1,658 @@
+---
+title: "Kaggle ML & DS Survey 2018- Insights based on 23859 Kagglers"
+author: "GSD"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    code_folding: hide
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE,message = FALSE)
+```
+
+# Hola Kagglers ..
+
+* The future of work is going to be different.Irrespective of which domain you work , AI is going to have a significant impact .The volume of data processed is increasing day by day and ever since HBR quoted Analytics as **The Sexiest Job of 21st Century** , it has only added up the craze.
+
+* Kaggle has been administering the Machine Learning and Data science survey from [last year](https://www.kaggle.com/gsdeepakkumar/decoding-the-sexiest-job-of-21st-century) with a goal to understand the state of data science and machine learning.This years survey has been extremely well received with a jump of 49 % in the response rate compared to last year.
+
+*  Based on the recent developments in analytics field and common modelling problems faced in the machine learning community this year there were also questions on preference of cloud computing platforms,perciving algorithmic bias ,model interpretability , barriers in reproducing an model to understand the pulse of the community.
+
+* There are some great insights from 23,859 enthusiastic respondents which I have shared through this kernel.Did you know that there is atleast **1 kaggler** in each of the **58 countries** represented in this survey who have completed their majors in one among the four of these majors- non-CS or CS engineering,Maths or statistics,IT or networking,Business administration ?**Check out lot more insights like these in this kernel..**
+
+
+
+# Theme:
+
+* While the questions presents a vast opportunity to look analyse the data , I have stuck with the basics -**use statistical testing** to validate my hypothesis and present the insights.This will be the central theme across the majority of my sections through out this kernel.
+
+* I hope you find this kernel very interesting and I would love to hear your thoughts on this .Please share your views through **comments** below.
+
+Lets begin.
+
+https://research.hackerrank.com/developer-skills/2018/
+https://www.kaggle.com/headsortails/what-we-do-in-the-kernels-kaggle-survey-2018/code
+
+# Loading the packages and data:
+
+```{r}
+library(tidyverse)
+library(ggthemes)
+library(janitor)
+library(viridisLite)
+library(RColorBrewer)
+library(viridis)
+library(janitor)
+library(scales)
+library(tidytext)
+library(forcats)
+library(grid)
+library(gridExtra)
+library(data.table)
+library(sjPlot)
+library(sjmisc)
+library(lme4)
+library(jtools)
+library(splitstackshape)
+library(egg)
+```
+
+
+```{r loading old data}
+## Reading the 2017 survey results:
+setwd("~/Downloads/R/Survey Kaggle/kaggle-survey-2017")
+survey_old <- read.csv("multipleChoiceResponses.csv",header=TRUE,stringsAsFactors = FALSE)
+survey_free_old <- read.csv("freeformResponses.csv",header=TRUE,stringsAsFactors = FALSE)
+```
+
+
+From the data description,it is seen that the first row in every column contains the questions and hence we dont include that row for our analysis.And we also convert the character columns to factors which could help for our analysis .(Thanks to Heads or Tails)
+
+```{r loading new data}
+## Reading the 2018 survey results:
+setwd("~/Downloads/R/Survey Kaggle")
+survey <- read.csv("multipleChoiceResponses.csv",header=TRUE,stringsAsFactors = FALSE,skip=1)
+survey_free <- read.csv("freeFormResponses.csv",header=TRUE,stringsAsFactors = FALSE,skip=1,na.strings = c("","NA"))
+survey <- survey %>% clean_names()
+survey_free <- survey_free %>% clean_names()
+## From Heads or Tails Kernel , 
+survey <- survey %>% mutate_if(is_character,as_factor)
+```
+
+# Overview :
+
+```{r creating function ,echo=FALSE}
+### Creating a helper function for a common theme:
+my_theme <- function(){
+  theme(legend.position='bottom',plot.title=element_text(size=15,hjust=0.5),plot.subtitle=element_text(size=10),axis.text.x=element_text(size=10,hjust=0.5),plot.caption=element_text(size=10,colour = "red",face="bold"),legend.title=element_text(face='bold'))
+}
+```
+
+
+```{r overview numbers}
+cat("There are",nrow(survey),"respondents compared to 2017 survey where there were",nrow(survey_old), "which is",round(((nrow(survey)-nrow(survey_old))/nrow(survey_old))*100,0),"% jump")
+cat("There are",length(unique(survey$in_which_country_do_you_currently_reside)),"countries represented in the survey")
+
+```
+
+# Demographic Details
+
+## Its a long way for gender diversity in this survey...
+
+```{r gender distribution,fig.width=10,fig.height=8}
+temp <- survey %>% group_by(what_is_your_gender_selected_choice) %>% summarise(count=n()) %>% arrange(desc(count)) %>% mutate(perc=percent(count/sum(count)),column="2018") %>% rename(GenderSelect="what_is_your_gender_selected_choice")
+gender=c("Male","Female","Different Identity","Non-binary, genderqueer, or gender non-conforming")
+survey_old$GenderSelect=factor(survey_old$GenderSelect,levels=gender) %>% droplevels()
+temp1=survey_old %>% group_by(GenderSelect)  %>% drop_na(GenderSelect)%>% summarise(count=n()) %>% mutate(perc=percent(count/sum(count)),column="2017")
+temp_all <- bind_rows(temp,temp1)
+ggplot(temp_all,aes(reorder(GenderSelect,-count),count,fill=column))+geom_bar(stat="identity",position=position_dodge())+theme_fivethirtyeight()+my_theme()+labs(x="Gender",y="Count",title="Gender Distribution",caption="Source:ML & DS Survey -2017 & 2018",fill="Year")+scale_x_discrete(labels=function(x)str_wrap(x,width=10))+scale_fill_manual(values=viridis(2))
+#+scale_fill_manual(values=c('cyan','orange'))
+```
+
+* With the rise in the number of people taking part in the survey,the number of Male and female respondents have definitely gone up.
+* The increase is more pronounced in the rise in the number of male respondents compared to the rise in female respondends.Clearly,the survey has been dominated by male .
+
+## 2 Asian countries gets recognised in top 3 spots..
+
+* Of the 58 countries represented in the survey,I Visualise the top 15 countries where the number of respondents is  more 500 for 2018 and compare those countries responses for 2017.
+
+* Certain countries in 2017 survey have different names in 2018 survey and vice-versa.For the purpose of comparison , I recode these names manually.
+
+
+```{r location of respondents,fig.width=13,fig.height=7}
+survey_old =survey_old %>% mutate(Country=factor(Country)) %>% mutate(Country=fct_recode(Country,"United States of America"="United States","China"="People 's Republic of China","China"="Republic of China","United Kingdom of Great Britain and Northern Ireland"="United Kingdom"))
+temp <- survey %>%drop_na(in_which_country_do_you_currently_reside) %>% group_by(in_which_country_do_you_currently_reside) %>% summarise(count=n()) %>% top_n(15) %>% arrange(desc(count)) %>% mutate(column='2018') %>% rename(Country=`in_which_country_do_you_currently_reside`) 
+temp1 <- survey_old %>% drop_na(Country) %>% group_by(Country) %>% summarise(count=n()) %>% arrange(desc(count)) %>% mutate(column='2017') %>% filter(Country %in% temp$Country) 
+temp_all=rbind(temp,temp1)
+ggplot(temp_all,aes(reorder(Country,-count),count,fill=column))+geom_bar(stat="identity",position=position_dodge())+theme_fivethirtyeight()+my_theme()+labs(x="Country",y="Count",title="Distribution of respondents of the survey",caption="Source:ML & DS Survey -2017 & 2018",fill="Year")+scale_x_discrete(labels=function(x)str_wrap(x,width=14))+scale_fill_manual(values=viridis(2))
+#scale_fill_manual(values=c('cyan','orange'))
+
+```
+
+* There has been no change in the top 3 countries where the respondents come from .USA leads the pack followed closely by India and third is China.
+* while the top 14 among these countries have shown appreciation in the number of responses,only Australia has seen a dip in the number of survey takers.
+* Also , the awareness of data privacy  seems to have had a slight effect. A significant number of responses have been not to disclose their location .
+
+## Universally the industry has been active with lot of young minds with less than 1 year ,30 % of the population are Indians whereas US has most senior group.
+
+Coming to the age distribution , I visualise and compare the diversity in age groups between 2017 and 2018 . Then I also try to understand diversity of the age group for the country.
+
+
+```{r levels of age}
+levels(survey$what_is_your_age_years)
+```
+
+There seems to be too many distinctions in the age groups.I bin them into much smaller groups.Similarly,I use the same method for 2017 survey dataset .
+
+```{r creating age group column}
+survey= survey %>% mutate(age_group=case_when(what_is_your_age_years %in% c("18-21","22-24") ~"Below 25",what_is_your_age_years %in% c("25-29","30-34") ~ "25-34 years",what_is_your_age_years %in% c("35-39","40-44") ~"35-44 years",what_is_your_age_years %in% c("45-49","50-54") ~"45-54 years",what_is_your_age_years %in% c("55-59","60-69","70-79","80+")~ "Above 55 years"))
+survey_old <- survey_old %>% mutate(age_group=case_when(Age<=24 ~"Below 25",Age>=25 & Age<=34  ~ "25-34 years",Age>=35 & Age<=44 ~"35-44 years",Age >=45 & Age<=54 ~"45-54 years",Age >=55 ~ "Above 55 years",is.na(Age) ~"Unknown"))
+
+temp <- survey %>% group_by(age_group) %>% summarise(count=n())  %>% mutate(column='2018')
+temp1 <- survey_old  %>% group_by(age_group) %>% summarise(count=n()) %>% mutate(column='2017') 
+temp_all=rbind(temp,temp1)
+temp_all <- temp_all %>% mutate(age_group=factor(age_group,levels=c("Below 25","25-34 years","35-44 years","45-54 years","Above 55 years","Unknown")))
+ggplot(temp_all,aes(age_group,count,fill=column))+geom_bar(stat="identity",position=position_dodge())+theme_fivethirtyeight()+my_theme()+labs(x="Age Group",y="Count",title="Diversity in Age",caption="Source:ML & DS Survey -2017 & 2018",fill="Year")+scale_x_discrete(labels=function(x)str_wrap(x,width=14))+scale_fill_manual(values=viridis(2))
+#scale_fill_manual(values=c('cyan','orange'))
+
+```
+
+
+* With the data science becoming a hot career option among the fresh graduates and the increase in MOOC courses,there are lot of people who are practising analytics . This is clearly evident here with the number of responses received for "Below 25" age bracket.This bracket has seen a huge jump when compared to other age brackets.
+
+* The number of responses has remained more or less the same for age bracket > 35 years.
+
+* While the age diversity gives the mix of respondens who have taken up the survey ,I am interested to find out from which part of the word does the two age groups - Below 25 and >45 years come up.
+
+```{r age diversity,fig.width=10,fig.height=10}
+temp <- survey %>% filter(age_group=="Below 25") %>% group_by(in_which_country_do_you_currently_reside) %>% summarise(total=n()) %>% mutate(perc=percent(total/sum(total)))  %>% arrange(desc(total))
+g1<-ggplot(head(temp,10),aes(reorder(in_which_country_do_you_currently_reside,-total),total,fill=in_which_country_do_you_currently_reside))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))+labs(x="Country",y="Count",title="Top 10 Countries with Below 25 age group",subtitle=" ")+scale_x_discrete(labels=function(x)str_wrap(x,width=14))+theme(legend.position="none")+scale_fill_brewer(palette='Paired')
+temp <- survey %>% filter(age_group %in% c("Above 55 years","45-54 years")) %>% group_by(in_which_country_do_you_currently_reside) %>% summarise(total=n()) %>%  mutate(perc=percent(total/sum(total))) %>% arrange(desc(total))
+g2<-ggplot(head(temp,10),aes(reorder(in_which_country_do_you_currently_reside,-total),total,fill=in_which_country_do_you_currently_reside))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))+labs(x="Country",y="Count",title="Top 10 Countries with Above 44 age group",subtitle=" ",caption="Source:ML & DS Survey -2017 & 2018 ",fill="Year")+scale_x_discrete(labels=function(x)str_wrap(x,width=14))+theme(legend.position="none")+scale_fill_brewer(palette='Paired')
+
+
+
+grid.arrange(g1,g2,nrow=2,ncol=1,top=textGrob("India leads with Youngest pack of respondents whereas US has the most mature group", gp=gpar(fontsize=15,font=1)))
+```
+
+* India,USA and China occupies the top 3 spots followed by Russia for samples with below 25 years of age.
+* The ecosystem in India for analytics is fast catching up and many young grads out of college are opting for analytics as a career option given the various research and problem solving angles it provides.Therefore we see that India occupies the top spot with 29.6 % .USA comes a distant second.I persume that most of the below 25 age group would be in their first job or pursuing their higher studies.
+* US takes the pride in having 32.8 % active population with above 44 years of age.
+
+While the finding is quite encouraging,I am just curious to know when the population would have started with coding to analyse with data.
+
+```{r writing code young,fig.width=10}
+survey <- survey %>% mutate(how_long_have_you_been_writing_code_to_analyze_data=fct_relevel(how_long_have_you_been_writing_code_to_analyze_data,"< 1 year","1-2 years","3-5 years","5-10 years","10-20 years","20-30 years","30-40 years","40+ years","I have never written code but I want to learn","I have never written code and I do not want to learn",""))
+temp <- survey %>% filter(age_group=="Below 25") %>% group_by(how_long_have_you_been_writing_code_to_analyze_data) %>% filter(!how_long_have_you_been_writing_code_to_analyze_data=="")%>% summarise(total=n()) %>%  mutate(perc=percent(total/sum(total))) %>% rename(code_write=`how_long_have_you_been_writing_code_to_analyze_data`)
+ggplot(temp,aes(code_write,total,fill=total))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Coding years",y="Count",title="When did the passion start?",caption="Source:ML & DS Survey 2018")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))+scale_x_discrete(labels=function(x)str_wrap(x,width=14))+theme(legend.position="none")+scale_fill_gradientn(name="",colors = rev(viridis(10)))
+```
+
+* Clearly,the survey takers with <25 years of age are taking their baby steps in the field of analytics with <1 years & 1 to 2 years (~ 40 %) of **writing code to analyse the data** .I am stressing upon analysing the data since it may be that they would have been programmers in the past and are into analytics  for the past 1 year. 
+* There is also a significant 5.2 % of people who have never written coding but have interest to learn.
+
+# Education and Professional Profile :
+
+## 4 Undergraduate major gets represented universally while 1 is dominated in US
+
+* While it is a known fact that the analytics industry consist of professionals from diverse background raging from STEM to arts and medical , I am interested to know which country has respondents from more diverse backgrounds and what they represent.
+
+* Before that let me confirm whether there is a statistical significance between the countries for educational background . I use Chi-Square statistic for this.
+
+
+```{r stat significance}
+temp <- survey %>% select(which_best_describes_your_undergraduate_major_selected_choice,in_which_country_do_you_currently_reside) %>% drop_na() %>% remove_empty_rows() %>% filter(!which_best_describes_your_undergraduate_major_selected_choice %in% c("I never declared a major","","Other"))
+chisq.test(temp$in_which_country_do_you_currently_reside,temp$which_best_describes_your_undergraduate_major_selected_choice)
+```
+
+
+The p value is highly sighificant which means that there is a significant difference between the educational qualification between the countries.
+
+```{r undergrad ,fig.width=10,fig.height=7}
+temp <- survey %>% filter(!which_best_describes_your_undergraduate_major_selected_choice %in% c("I never declared a major","","Other")) %>% group_by(which_best_describes_your_undergraduate_major_selected_choice) %>% summarise(count=length(unique(in_which_country_do_you_currently_reside))) %>% arrange(desc(count))
+ggplot(temp,aes(reorder(which_best_describes_your_undergraduate_major_selected_choice,-count),count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Undergrad Major",y="Count",title="Diversity in Educational Background",caption="Source:ML & DS Survey 2018")+scale_x_discrete(labels=function(x)str_wrap(x,width=14))+theme(legend.position="none")+geom_text(aes(label = count, hjust = 0.5,vjust = -0.05, size =2))+scale_fill_gradientn(name="",colors = rev(viridis(10)))
+```
+
+* All the 58 countries represented in the survey have got atleast 1 engineer graduated with a STEM major or with finance major.
+* The number of samples with fine arts is least represented group in this survey.33 of the 58 countries do not have people coming from fine arts background.Let us see from which countries do they come from.
+
+```{r residence ,fig.width=7,fig.height=10}
+temp <- survey %>% filter(which_best_describes_your_undergraduate_major_selected_choice=="Fine arts or performing arts") %>% group_by(in_which_country_do_you_currently_reside) %>% summarise(count=n())
+
+ggplot(temp,aes(reorder(in_which_country_do_you_currently_reside,count),count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Country",y="Count",title="Fine Arts",caption="Source:ML & DS Survey 2018",subtitle="From which country are they?")+scale_x_discrete(labels=function(x)str_wrap(x,width=18))+theme(legend.position="none")+geom_text(aes(label = count, hjust = -0.5,vjust = 0.05, size =2))+scale_fill_gradientn(name="",colors = rev(viridis(20)))+coord_flip()
+```
+
+* Clearly , US seems to outwin every other contries here.The country has 42 fine arts people who have taken up the survey followed by China.
+
+## Gender,Age,Country,Education background and domain decides the salary 
+
+* While it is a known fact that there will be a difference in salary between different groups like gender,education level,country I am interested to find which of these varible contributes more to the difference.The variables I persume would differenciate salary group are age,country,gender,industry,education and job title.MANOVA test is applied here.
+
+```{r manova}
+## Extract the required variables,
+temp <- survey %>% select(what_is_your_current_yearly_compensation_approximate_usd, what_is_your_age_years,in_which_country_do_you_currently_reside,which_best_describes_your_undergraduate_major_selected_choice,what_is_your_gender_selected_choice,select_the_title_most_similar_to_your_current_role_or_most_recent_title_if_retired_selected_choice,in_what_industry_is_your_current_employer_contract_or_your_most_recent_employer_if_retired_selected_choice) %>% rename(country=`in_which_country_do_you_currently_reside`,salary=`what_is_your_current_yearly_compensation_approximate_usd`,age=`what_is_your_age_years`,edu=`which_best_describes_your_undergraduate_major_selected_choice`,gender=`what_is_your_gender_selected_choice`,title=`select_the_title_most_similar_to_your_current_role_or_most_recent_title_if_retired_selected_choice`,industry=`in_what_industry_is_your_current_employer_contract_or_your_most_recent_employer_if_retired_selected_choice`) %>% filter(!salary %in% c("I do not wish to disclose my approximate yearly compensation",""),!industry %in% c("I am a student","","Other"),!title=="Other",!country=="Other",!edu=="Other",!gender %in% c("Prefer not to say","Prefer to self-describe"))
+
+temp$salary <- as.factor(temp$salary)
+test <- manova(cbind(country,age,edu,gender,title,industry)~salary,data=temp)
+summary.aov(test)
+```
+
+* From the results,it is seen that gender,age,country,education of the person and the industry which the person is working is having a significant effect in determining the salary of the person.
+* The job title is not significant in determining the salary.
+
+
+## Deep dive into who gets paid  the highest salary
+
+While it is clear that age,gender,country,education and industry significantly differentiates the salary ,I am interested in finding out how these variables change with by taking the samples of high salaried people.
+
+```{r filter high salary}
+temp <- survey %>% filter(what_is_your_current_yearly_compensation_approximate_usd =="500,000+")
+cat("There are",length(unique(temp$in_which_country_do_you_currently_reside)),"countries out of",length(unique(survey$in_which_country_do_you_currently_reside)),"countries surveyed paying more than USD 500k annual salary")
+```
+
+
+
+**Whats their gender ?**
+
+```{r high salary gender}
+plot <- setDT(temp)[,.(count=.N),by=what_is_your_gender_selected_choice][order(-count)]
+plot <- plot %>% mutate(perc=percent(count/sum(count)))
+ggplot(plot,aes(what_is_your_gender_selected_choice,count,fill=what_is_your_gender_selected_choice))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Gender",y="Count",title="Highest Paid People",caption="Source:ML & DS Survey 2018",subtitle="Gender Diversity")+scale_x_discrete(labels=function(x)str_wrap(x,width=8))+scale_fill_manual(values=viridis(4))+theme(legend.position="none")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))
+```
+
+* More than 50 % of the 63 highest paid people are male while a mere 12.7 % of the represented sample are female.This is not surprising given a high representation of male in the survey.
+
+
+**Which country are they from ?**
+
+```{r high salary country,fig.width=7,fig.height=10}
+plot <- temp %>% group_by(in_which_country_do_you_currently_reside) %>% summarise(count=n()) %>% arrange(desc(count))
+ggplot(plot,aes(reorder(in_which_country_do_you_currently_reside,count),count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Country",y="Count",title="Which country pays more?",caption="Source:ML & DS Survey 2018",subtitle="The 21 countries ...")+scale_fill_gradientn(colors=rev(viridis(25)))+scale_x_discrete(labels=function(x)str_wrap(x,width=15))+theme(legend.position="none")+coord_flip()
+```
+
+* USA,India and China are the top 3 countries who pay more to attract the top talent and retain them .
+
+**From which age group they come from ?**
+
+```{r high salary age group}
+plot <- survey %>% filter(what_is_your_current_yearly_compensation_approximate_usd =="500,000+") %>% group_by(age_group) %>% summarise(count=n()) %>% mutate(perc=percent(count/sum(count)))
+ggplot(plot,aes(age_group,count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Age Group",y="Count",title="Which age group commands higher salary?",caption="Source:ML & DS Survey 2018",subtitle="Age Group and %")+scale_fill_gradientn(colors=rev(viridis(10)))+scale_x_discrete(labels=function(x)str_wrap(x,width=8))+theme(legend.position="none")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))
+```
+
+* From the summary , it is seen that ~50 % of the highest paid people are between 25 to 45 years of age while ~37 % of the people are above 45 years.Is this age same for both male and female ?
+
+**What is their experience in current role and what is their role?**
+
+```{r high salary experience}
+plot <- temp %>% filter(!select_the_title_most_similar_to_your_current_role_or_most_recent_title_if_retired_selected_choice %in% c("Other","Student")) %>% mutate(how_many_years_of_experience_do_you_have_in_your_current_role=fct_relevel(how_many_years_of_experience_do_you_have_in_your_current_role,"0-1","1-2","2-3","3-4","4-5","5-10",'10-15',"15-20","20-25","25-30","30 +")) %>%group_by(how_many_years_of_experience_do_you_have_in_your_current_role,select_the_title_most_similar_to_your_current_role_or_most_recent_title_if_retired_selected_choice) %>% summarise(count=n())
+ggplot(plot,aes(how_many_years_of_experience_do_you_have_in_your_current_role,select_the_title_most_similar_to_your_current_role_or_most_recent_title_if_retired_selected_choice,fill=count))+geom_tile()+theme_fivethirtyeight()+my_theme()+labs(x="Years of Experience",y="Current role",title="Positions offering  USD 500K + Salary",subtitle="Experience and Current Role",caption="Source:ML & DS Survey 2018")+scale_y_discrete(labels=function(x)str_wrap(x,width=15))+theme(legend.position="none")+ scale_fill_gradientn(colors = rev(viridis(10)))+geom_text(aes(label=count))
+```
+
+
+* There are 11 positions offering a high salary of more than USD 500K .
+* It is clear that  the number of people getting high salary increases as the years of experience increases.
+* With 1-3 years of experience ,there are 4 Data Scientist who have the unique distinction of being offered high salary.No other position has offered such high salary with that experience.
+* There are more people with "Chief Officer" role who receive $500K+ when the years of experience is equal to or more than 5-10 years.
+
+**Whats their highest education ?**
+
+```{r high salary edu,fig.width=10,fig.height=8}
+plot <- setDT(temp)[!which_best_describes_your_undergraduate_major_selected_choice %in% c("","Other"),.(count=.N),by=which_best_describes_your_undergraduate_major_selected_choice][order(-count)]
+plot <- plot %>% mutate(perc=percent(count/sum(count)))
+ggplot(plot,aes(reorder(which_best_describes_your_undergraduate_major_selected_choice,-count),count,fill=which_best_describes_your_undergraduate_major_selected_choice))+geom_bar(stat="identity")+theme_fivethirtyeight()+scale_fill_manual(values = rev(viridis(20)))+my_theme()+labs(x="Undergrad Major",y="Count",title="Whats their major?",caption="Source:ML & DS Survey 2018")+scale_x_discrete(labels=function(x)str_wrap(x,width=15))+theme(legend.position="none")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))
+```
+
+* Put together ,more than 50 % of the sample represented have a CS or engineering background . 
+* 11 % have mathematics background.
+
+**Which industry pays USD 500K+ salary ?**
+
+```{r high salary industry,fig.width=15,fig.height=8}
+plot <- temp %>% filter(!in_what_industry_is_your_current_employer_contract_or_your_most_recent_employer_if_retired_selected_choice %in% c("I am a student","Other")) %>% group_by(in_what_industry_is_your_current_employer_contract_or_your_most_recent_employer_if_retired_selected_choice) %>% summarise(count=n()) %>% mutate(perc=percent(count/sum(count))) %>% arrange(desc(count))
+ggplot(plot,aes(reorder(in_what_industry_is_your_current_employer_contract_or_your_most_recent_employer_if_retired_selected_choice,-count),count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Industry",y="Count",title="Which domain they work?",caption="Source:ML & DS Survey 2018",subtitle="Which industry pays the highest?")+scale_x_discrete(labels=function(x)str_wrap(x,width=15))+ scale_fill_gradientn(colors = rev(viridis(10)))+theme(legend.position="none")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))
+```
+
+
+* ~40 % of the sample are working in tech domain followed by 20.8 % in accounting or finance domain.
+
+* To conclude, the highest paid people are graduates in CS or engineering background working in USA,India or China ,aged between 25-45 years with average experience of 5-10 years and work in technology or finance/accounting domain . There are also few data scientist who command a higher salary and have a 1-3 experience.
+
+
+# All about data - The learning Part
+
+* With the rise in number of sources to learn data science ,people are having a wide choice in selecting the courses and learning from them.Also,many of the languages known are open sourced and free where people are free to make changes or add new features.
+
+* It becomes necessary to understand this learning aspect and how people are distributed in their choices .
+
+## High positive response from CS grads for MOOC while perception is different for non-CS grads
+
+```{r perception,fig.width=8,fig.height=10}
+
+names <- sapply(colnames(survey)[331:332],function(x)gsub('how_do_you_perceive_the_quality_of_online_learning_platforms_and_in_person_bootcamps_as_compared_to_the_quality_of_the_education_provided_by_traditional_brick_and_mortar_institutions_',"",x))
+colnames(survey)[331:332] <- names
+
+survey <- survey %>% mutate(in_person_bootcamps=fct_relevel(in_person_bootcamps,"Much better","Slightly better","Neither better nor worse","Slightly worse","Much worse","No opinion; I do not know",""),online_learning_platforms_and_moocs=fct_relevel(online_learning_platforms_and_moocs,"Much better","Slightly better","Neither better nor worse","Slightly worse","Much worse","No opinion; I do not know",""))
+
+temp <- survey %>% filter(!online_learning_platforms_and_moocs=="") %>% mutate(online_learning_platforms_and_moocs=fct_relevel(online_learning_platforms_and_moocs,"Much better","Slightly better","Neither better nor worse","Slightly worse","Much worse","No opinion; I do not know")) %>%  group_by(online_learning_platforms_and_moocs) %>% summarise(count=n()) %>% mutate(perc=percent(count/sum(count))) %>% arrange(desc(count))
+
+
+q1 <- ggplot(temp,aes(online_learning_platforms_and_moocs,count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Perception",y="Count",title="Online Learning Platforms & Mooc",caption="Source:ML & DS Survey 2018",subtitle="Perception")+scale_x_discrete(labels=function(x)str_wrap(x,width=15))+theme(legend.position="none")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))+ scale_fill_gradientn(colors = rev(viridis(10)))
+
+temp <- survey %>% filter(!in_person_bootcamps=="") %>% mutate(in_person_bootcamps=fct_relevel(in_person_bootcamps,"Much better","Slightly better","Neither better nor worse","Slightly worse","Much worse","No opinion; I do not know")) %>%  group_by(in_person_bootcamps) %>% summarise(count=n()) %>% mutate(perc=percent(count/sum(count))) %>% arrange(desc(count))
+
+q2 <-  ggplot(temp,aes(in_person_bootcamps,count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Perception",y="Count",title="In Person Bootcamps",caption="Source:ML & DS Survey 2018",subtitle="Perception")+ scale_fill_gradientn(colors = rev(viridis(10)))+scale_x_discrete(labels=function(x)str_wrap(x,width=15))+theme(legend.position="none")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))
+
+grid.arrange(q1,q2,nrow=2,ncol=1,top=textGrob("Perception for Online Courses Vs Bootcamps",hjust=0.4, gp=gpar(fontsize=15,font=1)))
+
+```
+
+
+* More than 50 % of the respondents have rated MOOC's as better while close to 40 % of the respondents have mentioned that In person bootcamps are better . The high % of respondents received for no opinion category in bootcamp reveals a fact that more than 5000+ respondents have not attended any bootcamps.
+
+* I am interested to find out how the response for these questions vary based on the undergraduate major since there are people from diverse background doing analytics and they will have a different perception of the courses.
+
+```{r edu vs online courses,fig.width=10,fig.height=19}
+
+survey <- survey %>% rename(undergrad_major=`which_best_describes_your_undergraduate_major_selected_choice`)
+
+
+### Some data cleaning work - removing other,I never declared major in undergrad_major and removing blank in online_learning_platforms_and_moocs
+
+
+temp <- survey %>% filter(!undergrad_major %in% c("","Other","I never declared a major") ,!online_learning_platforms_and_moocs=="") %>% group_by(online_learning_platforms_and_moocs,undergrad_major) %>% summarise(count=length(undergrad_major)) %>% mutate(perc=percent(count/sum(count)))
+
+
+ggplot(temp,aes(undergrad_major,count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Undergrad Major",y="Count",title="Perception of Online Courses For Different Education Background",caption="Source:ML & DS Survey 2018",subtitle=" ")+scale_x_discrete(labels=function(x)str_wrap(x,width=18))+theme(legend.position="none")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.05, size =2))+facet_grid(online_learning_platforms_and_moocs~.)+ scale_fill_gradientn(colors = rev(viridis(20)))+theme(axis.text.x=element_text(angle=90))
+
+```
+
+* From the response , it is seen that there is a significant difference in the way people have respondend to the question.
+
+* Clearly Computer science and Engineering grads seems to dominate the question .Its pretty obvious since it has been noted in earlier finding that a majority of respondents come from STEM background.People coming from these 2 backgrounds have a positive outlook for online courses.
+
+* While People coming from social science ,Math,Physics and Humanities have a negative outlook for online courses  ,people from medical background have a more neutral outlook .Analytics is more of staticics and math.Also one needs to learn coding to suceed .People coming from non-tech backgroun might find it difficult to opt online courses due to Lack of person touch ,instant clarification of doubts,time factor .
+
+
+
+```{r edu vs in person courses,fig.width=10,fig.height=19}
+temp <- survey %>% filter(!undergrad_major %in% c("","Other","I never declared a major") ,!in_person_bootcamps=="") %>% group_by(in_person_bootcamps,undergrad_major) %>% summarise(count=length(undergrad_major)) %>% mutate(perc=percent(count/sum(count)))
+
+
+ggplot(temp,aes(undergrad_major,count,fill=count))+geom_bar(stat="identity")+theme_fivethirtyeight()+my_theme()+labs(x="Undergrad Major",y="Count",title="Perception of In Person Bootcamps For Different Education Background",caption="Source:ML & DS Survey 2018",subtitle=" ")+ scale_fill_gradientn(colors = rev(viridis(20)))+scale_x_discrete(labels=function(x)str_wrap(x,width=18))+theme(legend.position="none")+geom_text(aes(label = perc, hjust = 0.5,vjust = -0.01, size =2))+facet_grid(in_person_bootcamps~.)+theme(axis.text.x=element_text(angle=90))
+```
+
+* From the graph it is understood that while the response varies between the different undergrad courses , there seems to be no difference in the type of response received between inperson vs online courses . For both the questions , there are equal number of people who prefer one with respect to the other.
+
+# Where is the knowledge acquired ?
+
+* There are millions of sources now available for an aspiring data scientist/analyst to learn and apply the machine learning/data science algorithms.Through which medium are the majority of information consumed and is there a difference in reponse based on their ungraduate majors .
+
+* Considering the top 5 undergraduate majors ,
+```{r source of knowledge,fig.width=15,fig.height=15}
+### Inspired by Faraz Rahman's superb approach to similar questions.
+
+temp <- survey[,c(7,285:290)]
+
+
+temp[,2:7] <- sapply(temp[,2:7],as.numeric)
+
+
+temp[is.na(temp)] <- 0
+
+temp <- temp %>% filter(undergrad_major %in% c("Engineering (non-computer focused)","Computer science (software engineering, etc.)","Mathematics or statistics","Information technology, networking, or system administration","A business discipline (accounting, economics, finance, etc.)"))
+
+names=sapply(colnames(temp),function(x)gsub('what_percentage_of_your_current_machine_learning_data_science_training_falls_under_each_category_answers_must_add_up_to_100_',"",x))
+colnames(temp)=names
+#colnames(temp)
+
+temp_1 <- reshape2::melt(temp,value.name="Percentage",id="undergrad_major")
+
+temp_1 <- temp_1 %>% mutate(variable=fct_recode(variable,"Self Taught"="self_taught","MOOC"="online_courses_coursera_udemy_edx_etc","At Work"="work","University"="university","Kaggle Competitions"="kaggle_competitions","Others"="other"))
+
+
+ggplot(temp_1,aes(undergrad_major,y=Percentage,fill=undergrad_major))+geom_boxplot()+theme_fivethirtyeight()+labs(x=" Undergrad Major",y="Percentage",title="Where do they learn?",caption="Source:2018 Kaggle ML & DS Survey",subtitle="How people from diverse majors differ ")+scale_x_discrete(labels=function(x)str_wrap(x,width=24))+theme(axis.text.x=element_text(size=13,hjust=0.5,angle=90,face="bold"),legend.position='none',plot.title=element_text(size=20,hjust=0.5,face="bold"),plot.subtitle=element_text(size=10),legend.title=element_text(face='bold'),strip.text =element_text(face="bold",size=13),plot.caption=element_text(size=10,colour = "red",face="bold"))+scale_fill_manual(values=rev(viridis(15)))+facet_grid(variable~.,space="free")
+
+```
+
+* There seems to be a significant difference in the type of response received between each ungraduate majors.
+
+* There are large number of outliers across the graduates for people learning through kaggle competitions ,work and university.
+
+* Approximately 40 % of the learning across the majors happens through self learning and MOOC's.
+
+
+# No evidence in nature of work influenced by Undergrad major and job title 
+
+* Coming to the nature of work ,I am interested to understand if the respondents unanimously have voted for all the activities a typical data scientist/analyst does or is there any difference.I will consider people coming from the top 5 undergrad background as in the previous analysis.
+
+```{r edu and title influence,fig.width=15,fig.height=20}
+temp <- survey[,c(7,8,15:21)]
+
+temp <- temp %>% rename(job_title=`select_the_title_most_similar_to_your_current_role_or_most_recent_title_if_retired_selected_choice`)
+
+
+temp <- temp %>% filter(undergrad_major %in% c("Engineering (non-computer focused)","Computer science (software engineering, etc.)","Mathematics or statistics","Information technology, networking, or system administration","A business discipline (accounting, economics, finance, etc.)"),!job_title %in% c("","Student","Not employed","Other"))
+
+
+names(temp)[3:9] <- sapply(colnames(temp)[3:9],function(x)gsub('select_any_activities_that_make_up_an_important_part_of_your_role_at_work_select_all_that_apply_selected_choice_',"",x))
+
+temp <- reshape2::melt(temp,id=c("undergrad_major","job_title"),value.name="Work")
+temp$variable <- NULL
+
+
+temp <- temp %>% filter(!Work=="") %>%group_by(undergrad_major,job_title,Work) %>% summarise(count=length(Work)) %>% mutate(perc=percent(count/sum(count)))
+
+
+ggplot(temp,aes(Work,job_title,fill=count))+geom_tile(stat="identity")+scale_x_discrete(labels=function(x)str_wrap(x,width=30))+scale_fill_gradientn(colors=brewer.pal(5,"Reds"))+theme_bw()+theme(axis.text.x=element_text(size=13,hjust=0.5,angle=90,face="bold"),axis.text.y=element_text(size=13,face="bold"),legend.position='none',plot.title=element_text(size=20,hjust=0.5,face="bold"),plot.subtitle=element_text(size=10),legend.title=element_text(face='bold'),strip.text =element_text(face="bold",size=13),plot.caption=element_text(size=15,colour = "red",face="bold"))+facet_grid(undergrad_major~.,labeller=label_wrap_gen())+labs(x="",y="Count",title="Nature of Work",subtitle="Does it vary with title and their edu background?",caption="Source:ML & DS Survey 2018")
+
+```
+
+
+
+* The number of respondents is not distributed equally among the undergraduate majors or job title .Therefore the results seem to be biased towards one particular group - data scientist,data analyst ,software engineers.
+
+* A data scientist is more into analysing and understanding the data and building,prototyping ML services than running a data infrastructure.Similarly , a data analyst is more into analysis and understanding of the data.A software engineer does not perform any of the common data science work and hence we see a darker shade for it.
+
+* To test whether the nature of work is independent of undergrad major and job title MANOVA is carried out.
+
+```{r test ,fig.width=10,fig.height=8}
+test <- manova(cbind(undergrad_major,job_title)~Work,data=temp)
+summary.aov(test)
+
+
+```
+
+* From the summary of the test,it is seen that there is no significant influence of undergraduate major and job title in determining the nature of datascience work .
+
+# Working in diverse industries,a typical data scientist kaggler has less than 5 years of experience and is a graduate of math/statistics
+
+We have concluded from our previous analysis that the nature of data science work does not depend upon the education background or the job title .What other factors does one's undergraduate major influence on ? Does it have any influence in one being a data scientist? Lets investigate.
+
+* I am considering Q26 - Do you consider yourself as a data scientist ? and consider the variables undergrad major,age,gender,industry of work,years of experience,nature of work,type of data handled for this analysis as I feel that these may have a strong influence in felling one as a data scientist.Linear mixed effect model is used for arriving at statistical insights.
+
+**Acknowledgement:** The following part of analysis is inspired from Rachael's lecture on youtube [Does undergraduate major affect coder's ethics](https://www.youtube.com/watch?v=hEKJrdcO158) 
+
+* After applying the model,the coefficients of the model is obtained as follows,
+
+```{r who is a data scientist,fig.width=10,fig.height=20}
+
+## considering the required fields,
+
+temp <- survey[,c(2,396,7,8,10,12,15:20,251:261,130)]
+
+## renaming ,
+
+temp <- temp %>% rename(job_title=`select_the_title_most_similar_to_your_current_role_or_most_recent_title_if_retired_selected_choice`,industry=`in_what_industry_is_your_current_employer_contract_or_your_most_recent_employer_if_retired_selected_choice`,experience=`how_many_years_of_experience_do_you_have_in_your_current_role`,considerDS=`do_you_consider_yourself_to_be_a_data_scientist`)
+
+### remaning long columns,
+
+colnames(temp)[7:12]=sapply(colnames(temp)[7:12],function(x)gsub('select_any_activities_that_make_up_an_important_part_of_your_role_at_work_select_all_that_apply_selected_choice_',"",x))
+
+colnames(temp)[13:23]=sapply(colnames(temp)[13:23],function(x)gsub('which_types_of_data_do_you_currently_interact_with_most_often_at_work_or_school_select_all_that_apply_selected_choice_',"",x))
+
+### reducing the columns
+
+temp_1 <- reshape2::melt(temp,id=c(1:6,13:23,24),value.name="TypeOfWork")
+temp_1$variable <- NULL
+
+temp_1 <- reshape2::melt(temp_1,id=c(1:6,18:19),value.name="TypeOfData")
+
+temp_1$variable <- NULL
+
+### Convert DS to binary levels:
+
+temp_1 <- temp_1 %>% mutate(considerDS=fct_recode(considerDS,"Yes"="Definitely yes","Yes"="Probably yes","No"="Definitely not","No"="Probably not","No"="Maybe")) %>% filter(!considerDS=="") %>% droplevels()
+
+temp_1 <- temp_1 %>% mutate(TypeOfWork=as.factor(TypeOfWork),TypeOfData=as.factor(TypeOfData))
+
+temp_1$considerDS <- as.numeric(if_else(temp_1$considerDS=="Yes","1","0"))
+
+### Simplify gender categories:
+
+temp_1[!temp_1$what_is_your_gender_selected_choice %in% c("Male","Female"),"what_is_your_gender_selected_choice"] <- NA
+
+temp_1$what_is_your_gender_selected_choice <- factor(temp_1$what_is_your_gender_selected_choice,levels=c("Male","Female"))
+
+temp_1 <- temp_1 %>% filter(!undergrad_major %in% c("","I never declared a major","Other"),!job_title %in% c("Other","Not employed", "Student"),!industry %in% c("Other","I am a student",""),!experience=="",!TypeOfWork=="" & !TypeOfData=="")
+
+### applying the linear mixed effect model - considering gender and age group as random effects.
+
+
+consider_ds_model <- lmer(considerDS ~(1|what_is_your_gender_selected_choice)+(1|age_group)+undergrad_major+industry+experience+TypeOfWork+TypeOfData,data=temp_1)
+
+summary(consider_ds_model)$coefficients
+
+
+#plot_model(consider_ds_model) +theme_bw()+scale_x_discrete(labels=function(x)str_wrap(x,width=40))+labs(title="Data Scientist-Who am I ?")+my_theme()
+
+
+#plot_summs(consider_ds_model)+theme_bw()+scale_x_discrete(labels=function(x)str_wrap(x,width=40))+labs(title="Data Scientist-Who am I ?")+my_theme()
+
+```
+
+
+* From the output of the estimates of the linear mixed effect model we see as the data scientist are typically of < 5 years of experience . Also,there are data scientist who have 25-30 years of experience.
+* The higher one works on building a machine learning service,works on ML prototype or doing research on ML the higher is his chances of being a data scientist.
+* One having an undergraduate major done in maths,physics or social sciences has chances of being a data scientist.
+* Data scientist are working in diverse industries and the chances of being a data scientist in military/security or defence is less compared to other industries.
+
+# Conclusion and Scope for future work 
+
+* As explained in the beginning of the analysis , considering the diverse set of questions and responses , lot of interesting analysis and insights can be derived.There is also a scope to conduct more statistical decompsition techniques to understand the salary difference between groups and arrive at a statistical conclusion inaddition to what I have done here which I will try out when I find time.
+* Thanks for reading this far.**Appreciate your comments/upvotes.**
+
+# Tools & Techniques :
+
+* With the rise of sophisticated tools, the task of gathering insights from the data has been made much easier when compared to what it was 5 years  back . Though we have lot of tools in the market, it is only a few which has a strong user base because of its easy user experience and abundant libraries/functions available at hand for various type of analysis and visualisation. Kaggle in its survey had asked few questions relaed to the tools and technologies and with that we begin this section to understand the popular tools and how it differs from previous year number . Also , is the difference in numbers significant ? Lets find out.
+
+
+```{r}
+temp <- survey %>% filter(!what_is_the_primary_tool_that_you_use_at_work_or_school_to_analyze_data_include_text_response_selected_choice=="") %>% rename(tool_now=`what_is_the_primary_tool_that_you_use_at_work_or_school_to_analyze_data_include_text_response_selected_choice`)%>% group_by(tool_now) %>% summarise(count=n()) %>% mutate(perc=percent(count/sum(count)))
+
+temp$year <- "2018"
+
+temp <- temp %>% mutate(tool_now=fct_relevel(tool_now,"Cloud-based data software & APIs (AWS, GCP, Azure, etc.)","Basic statistical software (Microsoft Excel, Google Sheets, etc.)","Local or hosted development environments (RStudio, JupyterLab, etc.)","Advanced statistical software (SPSS, SAS, etc.)","Business intelligence software (Salesforce, Tableau, Spotfire, etc.)","Other")) %>% droplevels()
+
+
+temp_old <- survey_old %>% select(WorkToolsSelect) %>% cSplit("WorkToolsSelect",sep=",",direction="long",drop=TRUE)
+
+a=c("Amazon Machine Learning","Cloudera","IBM Cognos","Microsoft R Server (Formerly Revolution Analytics)","Microsoft Azure Machine Learning","IBM Watson / Waton Analytics","Google Cloud Compute","Oracle Data Mining/ Oracle R Enterprise","Angoss","Microsoft SQL Server Data Mining","NoSQL","Amazon Web services")
+b=c("Mathematica","MATLAB/Octave","Microsoft Excel Data Mining","C/C++","Minitab")
+ce=c("Perl","Hadoop/Hive/Pig","Impala","Java","Python","R","SQL","Jupyter notebooks","TensorFlow","Unix shell / awk","Spark / MLlib","SAS Enterprise Miner","Flume","KNIME (free version)","Julia","SAP BusinessObjects Predictive Analytics","Orange","DataRobot","RapidMiner (commercial version)","Salfrod Systems CART/MARS/TreeNet/RF/SPM","RapidMiner (free version)","KNIME (commercial version)")
+d=c("IBM SPSS Modeler","IBM SPSS Statistics","SAS Base","SAS JMP","Statistica (Quest/Dell-formerly Statsoft)","Stan")
+e=c("Other")
+f=c("TIBCO Spotfire","Tableau","QlikView")
+
+### Inspired from Jonathan Boutchet's kernel - https://www.kaggle.com/jonathanbouchet/metacritic-vs-users-who-to-trust/notebook
+
+toolsused <- function(x){
+    if(x %in% a){
+        return("Cloud-based data software & APIs (AWS, GCP, Azure, etc.)")
+    } else if(x %in% b){
+        return("Basic statistical software (Microsoft Excel, Google Sheets, etc.)")
+    }
+    else if(x %in% ce){
+        return("Local or hosted development environments (RStudio, JupyterLab, etc.)")
+    }
+    else if(x %in% d){
+        return("Advanced statistical software (SPSS, SAS, etc.)")
+    }
+    else if(x %in% e){
+        return("Other")
+    }
+    else if(x %in% f){
+        return("Business intelligence software (Salesforce, Tableau, Spotfire, etc.)")
+    }
+
+}
+
+temp_old$tool_now <- sapply(temp_old$WorkToolsSelect,toolsused)
+temp_old$tool_now <- factor(temp_old$tool_now,levels = c("Cloud-based data software & APIs (AWS, GCP, Azure, etc.)","Basic statistical software (Microsoft Excel, Google Sheets, etc.)","Local or hosted development environments (RStudio, JupyterLab, etc.)","Advanced statistical software (SPSS, SAS, etc.)","Business intelligence software (Salesforce, Tableau, Spotfire, etc.)","Other"))
+
+temp_old <- temp_old %>% group_by(tool_now) %>% summarise(count=n()) %>% mutate(perc=percent(count/sum(count)))
+
+temp_old$year <- "2017"
+
+temp <- rbind(temp,temp_old)
+
+ ggplot(temp,aes(x=year,y=count,group=tool_now,color=tool_now,size=2)) + 
+  geom_line() +
+  my_theme() + 
+  scale_color_brewer(name='', palette = 'Set1') + labs(x="Year",y="Number of Respondents",title='Trend of Primary Tools Used at work',subtitle="2017 Vs 2018 Scenario",caption="2018 ML & DS Survey")+geom_smooth(aes(y=count,group=tool_now),method='lm',size=.5, alpha=.25, color='black') + facet_wrap(~tool_now,nrow=1) + theme(legend.position='None')
+
+
+
+```
+
+
+
+
+
+```{r reference }
+#temp=survey[,17:34]
+#colnames(temp)
+#names=c("Arxiv","Blog","College","Company","Conferences","Friends","Kaggle","Newsletters","Communities","Documentation","Courses","Projects","Podcasts","SO","Textbook","Tradebook","Tutoring","Youtube")
+#names=sapply(colnames(temp),function(x)gsub('LearningPlatformUsefulness'," ",x))
+#colnames(temp)=names
+#colnames(temp)
+#temp[is.na(temp)]="Not responded"
+# unique(temp$Arxiv)
+# lapply(temp,function(x)length(table(x)))
+# temp=cbind(temp,survey$LearningPlatformSelect)
+# colnames(temp)[19]="LearningPlatform"
+# temp=melt(temp,id.vars="LearningPlatform",value.name="Usefulness")
+# temp$LearningPlatform=NULL
+# colnames(temp)[1]="Platform"
+# temp=subset(temp,temp$Usefulness !="Not responded")
+# temp=ddply(temp,.(Platform,Usefulness),summarise,count=n())
+
+#https://www.kaggle.com/amberthomas/kaggle-2017-survey-results
+# 
+#  Create a corpus
+# jobTitles <- Corpus(VectorSource(cleanFFData$CurrentJobTitleFreeForm))
+# 
+# # Convert to plain text document
+# jobTitles <- tm_map(jobTitles, PlainTextDocument)
+# 
+# # Remove numbers and punctuation, just in case
+# jobTitles <- tm_map(jobTitles, removeNumbers)
+# jobTitles <- tm_map(jobTitles, removePunctuation)
+# 
+# # Make all jobTitles lowercase
+# jobTitles <- tm_map(jobTitles, content_transformer(tolower))
+# 
+# # Remove non job title words
+# jobTitles <- tm_map(jobTitles, removeWords, c("and"))
+# 
+# wordcloud(jobTitles, 
+#           scale = c(5,0.2), 
+#           max.words = 150, 
+#           random.order = FALSE, 
+#           rot.per = 0.35, 
+#           use.r.layout = TRUE, 
+#           colors = brewer.pal(6, "Blues")[c(4,5,6,7,8,9)])
+
+```
+
